@@ -1,0 +1,61 @@
+﻿@page "/file"
+@inject HttpClient Http
+@using ML_Demo3.Shared
+
+<h1>@message</h1>
+
+<div class="input-group">
+	<div class="custom-file">
+		<InputFile class="custom-file-input" multiple OnChange="OnChange" accept="image/png, image/jpeg, image/gif" id="inputFile" />
+		<label class="custom-file-label" for="inputFile">Choose file</label>
+	</div>
+	<div class="input-group-append">
+		<button class="btn btn-success" @onclick="Upload" disabled="@isDisabled">Upload</button>
+	</div>
+</div>
+<br />
+<b>@result</b>
+
+@foreach (var item in filesBase64)
+{
+	<img src="data:@item.contentType;base64,@item.base64data"  width="250" height="250" />
+}
+
+@code {
+	List<ImageFile> filesBase64 = new List<ImageFile>();
+	string message = "InputFile";
+	bool isDisabled = false;
+	string result = string.Empty;
+
+	async Task OnChange(InputFileChangeEventArgs e)
+	{
+		var files = e.GetMultipleFiles();
+		foreach(var file in files)
+		{
+			var resizedFile = await file.RequestImageFileAsync(file.ContentType, 640, 480); 
+			var buf = new byte[resizedFile.Size];
+			using (var stream = resizedFile.OpenReadStream())
+			{
+				await stream.ReadAsync(buf);
+			}
+			filesBase64.Add(new ImageFile { base64data = Convert.ToBase64String(buf), contentType = file.ContentType, fileName = file.Name });
+		}
+		message = "Click UPLOAD to continue";
+	}
+
+	async Task Upload()
+	{
+		isDisabled = true;
+		using (var msg = await Http.PostAsJsonAsync<List<ImageFile>>("/api/upload", filesBase64, System.Threading.CancellationToken.None))
+		{
+			isDisabled = false;
+			if (msg.IsSuccessStatusCode)
+			{
+				message = $"{filesBase64.Count} files uploaded";
+				filesBase64.Clear();
+			}
+			 var data = await msg.Content.ReadFromJsonAsync<ImageFile>();
+			 result = $"This image belong to {data.result} Category";
+		}
+	}
+}
